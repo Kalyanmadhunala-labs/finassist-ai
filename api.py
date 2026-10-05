@@ -1,9 +1,9 @@
 import time
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from finassist_graph import app
+from finassist_graph import run_finassist
 
 
 api = FastAPI(
@@ -14,7 +14,11 @@ api = FastAPI(
 
 
 class QuestionRequest(BaseModel):
-    question: str
+    question: str = Field(
+        ...,
+        min_length=1,
+        description="User question for Finassist AI"
+    )
 
 
 class QuestionResponse(BaseModel):
@@ -33,11 +37,20 @@ def home():
 @api.post("/ask", response_model=QuestionResponse)
 def ask_question(request: QuestionRequest):
 
+    # Reject whitespace-only questions.
+    if not request.question.strip():
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=400,
+            detail="Question cannot be empty."
+        )
+
     start_time = time.time()
 
-    result = app.invoke(
+    result = run_finassist(
         {
-            "question": request.question,
+            "question": request.question.strip(),
             "route": "",
             "sql_result": {},
             "rag_result": "",
@@ -46,10 +59,10 @@ def ask_question(request: QuestionRequest):
         }
     )
 
-    elapsed_time = time.time() - start_time
+    elapsed = time.time() - start_time
 
     return {
-        "question": request.question,
+        "question": request.question.strip(),
         "answer": result["final_answer"],
-        "response_time_seconds": round(elapsed_time, 2)
+        "response_time_seconds": round(elapsed, 2)
     }
